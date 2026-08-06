@@ -1,0 +1,23 @@
+target,stratum,subgroup,n,r2,overall_r2
+duration,age_band,81+,1955,0.0314,0.1041
+duration,age_band,61-80,18803,0.0747,0.1041
+duration,age_band,41-60,15277,0.1151,0.1041
+duration,age_band,18-40,9224,0.1392,0.1041
+duration,race_ethnicity,Unknown,431,0.0257,0.1041
+duration,race_ethnicity,Other,852,0.0506,0.1041
+duration,race_ethnicity,Asian,2122,0.0683,0.1041
+duration,race_ethnicity,Black or African American,2720,0.0718,0.1041
+duration,race_ethnicity,White,31707,0.0721,0.1041
+duration,race_ethnicity,More than one population,2548,0.09,0.1041
+duration,race_ethnicity,Hispanic or Latino,4879,0.1067,0.1041
+consistency,age_band,81+,1955,0.1805,0.2774
+consistency,age_band,61-80,18803,0.2317,0.2774
+consistency,age_band,18-40,9224,0.2423,0.2774
+consistency,age_band,41-60,15277,0.2679,0.2774
+consistency,race_ethnicity,Asian,2122,0.169,0.2774
+consistency,race_ethnicity,Black or African American,2720,0.1703,0.2774
+consistency,race_ethnicity,Hispanic or Latino,4879,0.2104,0.2774
+consistency,race_ethnicity,Other,852,0.2308,0.2774
+consistency,race_ethnicity,More than one population,2548,0.2698,0.2774
+consistency,race_ethnicity,White,31707,0.2848,0.2774
+consistency,race_ethnicity,Unknown,431,0.3073,0.2774
