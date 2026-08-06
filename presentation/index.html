@@ -193,6 +193,8 @@ body {
   font-size: 0.78rem; font-weight: 600; letter-spacing: 0.04em;
   background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.2);
 }
+a.pill { color: inherit; text-decoration: none; transition: background 0.15s ease; }
+a.pill:hover { background: rgba(255,255,255,0.24); }
 
 /* ── Table ── */
 .data-table { border-collapse: collapse; width: 100%; max-width: 700px; font-size: 0.92rem; }
@@ -574,11 +576,11 @@ body {
     <div class="rule"></div>
     <div class="subhead">All of Us Research Program · 45,259 participants · All code open source</div>
     <div class="pill-row" style="justify-content:center; margin-top:28px">
-      <span class="pill">📊 Interactive Dashboard</span>
-      <span class="pill">📄 Full Report on GitHub</span>
+      <a class="pill" href="https://sleep-predict-capstone.streamlit.app" target="_blank" rel="noopener">📊 Interactive Dashboard</a>
+      <a class="pill" href="https://github.com/Auston-B/sleep-predict-capstone" target="_blank" rel="noopener">📄 Full Report on GitHub</a>
       <span class="pill">🔒 No individual data exported</span>
     </div>
-    <div class="title-meta">github.com/Auston-B/sleep-predict-capstone</div>
+    <div class="title-meta">github.com/Auston-B/sleep-predict-capstone · sleep-predict-capstone.streamlit.app</div>
   </div>
 
 </div>

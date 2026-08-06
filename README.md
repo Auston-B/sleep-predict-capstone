@@ -1,5 +1,6 @@
 # 😴 Sleep Health Prediction & Phenotyping in the *All of Us* Research Program
 
+[![Live dashboard](https://img.shields.io/badge/Streamlit-Live%20dashboard-FF4B4B?logo=streamlit&logoColor=white)](https://sleep-predict-capstone.streamlit.app)
 ![Python 3.11](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
 ![All of Us CDR v9](https://img.shields.io/badge/All%20of%20Us-CDR%20v9-purple?logo=nih)
@@ -106,9 +107,14 @@ by local tooling that is not part of this repository.
 
 ---
 
-## 🚀 Running the Dashboard
+## 🚀 The Dashboard
+
+**→ [sleep-predict-capstone.streamlit.app](https://sleep-predict-capstone.streamlit.app)**
 
 The interactive Streamlit dashboard visualizes model results, cluster profiles, and fairness metrics.
+Nothing to install and no authentication required — everything it displays is aggregate only.
+
+To run the same app locally instead:
 
 ```bash
 cd dashboard
@@ -116,7 +122,8 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The dashboard will open at `http://localhost:8501`. No authentication required — all data displayed is aggregate only.
+It opens at `http://localhost:8501`. The app reads the eight CSVs in `dashboard/` relative to its own
+file, so it runs from any working directory.
 
 ---
 
