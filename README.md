@@ -1,5 +1,6 @@
 # 😴 Sleep Health Prediction & Phenotyping in the *All of Us* Research Program
 
+[![Slide deck](https://img.shields.io/badge/Slides-Presentation-1F6FEB?logo=githubpages&logoColor=white)](https://auston-b.github.io/sleep-predict-capstone/)
 [![Live dashboard](https://img.shields.io/badge/Streamlit-Live%20dashboard-FF4B4B?logo=streamlit&logoColor=white)](https://sleep-predict-capstone.streamlit.app)
 ![Python 3.11](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
@@ -104,6 +105,17 @@ figures (`fig_yearly_sleep`, `fig_funnel`, `fig_sleep_distribution`) come from t
 instead, because they need a grain that never leaves the Workbench. The two schematic diagrams
 (`fig_data_flow`, `fig_ai_workflow`) are hand-authored illustrations rather than plots of data, drawn
 by local tooling that is not part of this repository.
+
+---
+
+## 🎤 The Presentation
+
+**→ [auston-b.github.io/sleep-predict-capstone](https://auston-b.github.io/sleep-predict-capstone/)**
+
+The 21-slide deck walking through the question, the cohort, the models, the phenotypes and the
+fairness results. Navigate with the arrow keys, space, or by clicking. It is served from
+`presentation/`, redeployed by GitHub Actions on every push to `main`, so it never falls behind the
+figures in this repository.
 
 ---
 
