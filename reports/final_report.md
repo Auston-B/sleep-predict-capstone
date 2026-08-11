@@ -2,7 +2,7 @@
 
 **Sophia Boettcher, Auston Balwinski, Hunter Belous, Jared Fox**  
 School of Information, University of Michigan  
-SIADS 699 Capstone Project — July 2026
+SIADS 699 Capstone Project — August 2026
 
 ---
 
@@ -16,7 +16,7 @@ We used wearable data from 45,259 All of Us participants (CDR v9) to predict sle
 
 ## 1. Introduction
 
-Sleep is a pillar of health, co-equal with nutrition and physical activity in its influence on chronic disease risk and cognitive function, yet it remains poorly integrated into clinical workflows and health equity research. Adults in the United States average fewer than the recommended seven to nine hours a night, with substantial disparities across racial, socioeconomic, and geographic groups (Centers for Disease Control and Prevention, 2016).
+Sleep is a pillar of health, co-equal with nutrition and physical activity in its influence on chronic disease risk and cognitive function, yet it remains poorly integrated into clinical workflows and health equity research. Adults in the United States average fewer than the recommended seven to nine hours a night, with substantial disparities across racial, socioeconomic, and geographic groups (Pankowska et al., 2023).
 
 Two things about sleep matter: duration, how much someone sleeps, and consistency, how much that varies night to night. All of Us lets us study both at scale, on a deliberately broad cohort with linked surveys, health records, and wearable data (Patten et al., 2026). We ask three questions:
 
@@ -40,7 +40,7 @@ Wearables enable passive measurement outside the clinic, and the All of Us resou
 
 ### 3.1 Data source and cohort
 
-Data came from the All of Us Controlled-Access Dataset v9 (National Institutes of Health, 2023) through the Researcher Workbench, principally the Fitbit sleep daily summary table. Cleaning kept main-sleep nights of four to twelve hours from 2017 onward, the year Fitbit adopted PPG-based staging visible as a step change in mean sleep and its variability (Appendix A.2). We also required at least four valid nights per participant and at least 70% night-level validity, leaving 48,688 participants and 30.6 million nights.
+Data came from the All of Us Controlled-Access Dataset v9 (National Institutes of Health, 2026) through the Researcher Workbench, principally the Fitbit sleep daily summary table. Cleaning kept main-sleep nights of four to twelve hours from 2017 onward, the year Fitbit adopted PPG-based staging visible as a step change in mean sleep and its variability (Appendix A.2). We also required at least four valid nights per participant and at least 70% night-level validity, leaving 48,688 participants and 30.6 million nights.
 
 A second floor followed from the outcome's definition rather than from its effect on any score. Consistency is a within-person standard deviation, so its precision depends on the number of nights behind it: below 30 nights, over a quarter of the target's variance is estimator noise (Appendix A.1). Restricting to at least 30 valid nights gives a final cohort of 45,259, 93% of the extract. Both floors are applied during extraction, so the analysis frame is already the analytic cohort.
 
@@ -214,15 +214,15 @@ The most consequential finding is that stratified evaluation locates two distinc
 
 ## References
 
-Centers for Disease Control and Prevention. (2016). *Insufficient sleep is a public health problem*. National Center for Chronic Disease Prevention and Health Promotion. https://www.cdc.gov/sleep/
-
 Chen, T., & Guestrin, C. (2016). XGBoost: A scalable tree boosting system. In *Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining* (pp. 785–794). https://doi.org/10.1145/2939672.2939785
 
 Chinoy, E. D., Cuellar, J. A., Huwa, K. E., Jameson, J. T., Watson, C. H., Bessman, S. C., Hirsch, D. A., Cooper, A. D., Drummond, S. P. A., & Markwald, R. R. (2021). Performance of seven consumer sleep-tracking devices compared with polysomnography. *Sleep*, *44*(5), zsaa291. https://doi.org/10.1093/sleep/zsaa291
 
 Hartmann, M. E., & Prichard, J. R. (2018). Calculating the contribution of sleep problems to undergraduates' academic success. *Sleep Health*, *4*(5), 463–471. https://doi.org/10.1016/j.sleh.2018.07.002
 
-National Institutes of Health. (2023). *All of Us Research Program Controlled Tier Dataset v9*. NIH All of Us Research Program.
+National Institutes of Health. (2026). *All of Us Research Program Controlled Tier Dataset v9*. NIH All of Us Research Program. https://www.researchallofus.org
+
+Pankowska, M. M., Lu, H., Wheaton, A. G., Liu, Y., Lee, B., Greenlund, K. J., & Carlson, S. A. (2023). Prevalence and geographic patterns of self-reported short sleep duration among US adults. *Preventing Chronic Disease*, *20*, Article 220400. https://doi.org/10.5888/pcd20.220400
 
 Patel, S. R., & Hu, F. B. (2008). Short sleep duration and weight gain: A systematic review. *Obesity*, *16*(3), 643–653. https://doi.org/10.1038/oby.2007.118
 
