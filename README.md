@@ -7,7 +7,7 @@
 ![All of Us CDR v9](https://img.shields.io/badge/All%20of%20Us-CDR%20v9-purple?logo=nih)
 ![Fitbit Wearables](https://img.shields.io/badge/Fitbit-Wearables-teal)
 
-> **SIADS 699 Capstone Project** · University of Michigan School of Information · July 2026  
+> **SIADS 699 Capstone Project** · University of Michigan School of Information · August 2026  
 > *Sophia Boettcher, Auston Balwinski, Hunter Belous, Jared Fox*
 
 ---
@@ -24,7 +24,7 @@ This project applies machine learning to Fitbit-derived sleep data from **45,259
 - **Top predictors for duration:** activity level (permutation importance 0.045), male gender (0.043), White race/ethnicity (0.039), age (0.031), BMI (0.030)
 - **Top predictor for consistency:** activity *irregularity* — the step coefficient of variation (0.133), roughly 3× the next feature. The activity–consistency relationship is curved rather than age-moderated, and no interaction term survived screening
 - **Wear time is a control, not a determinant.** Nights tracked scores 0.007 on duration under permutation importance on held-out data
-- **4 sleep phenotypes identified** (KMeans on four sleep-behaviour columns):
+- **4 sleep phenotypes identified** (KMeans on four sleep-behavior columns):
   - 🟢 **Consistent Good Sleepers** (39%, n=17,796) — adequate duration, lowest variability, highest activity, lowest BMI
   - 🟡 **Short but Regular** (27%, n=12,186) — 47% of nights under 6 h, but predictable schedules
   - 🔴 **Chronic Short & Variable** (24%, n=10,703) — at the cohort's mean duration but with the highest variability, the most nights at both extremes, highest BMI and youngest mean age.
@@ -51,9 +51,6 @@ sleep-predict-capstone/
 │   ├── models.py               # Feature matrix, CV, fairness evaluation
 │   ├── cluster.py              # KMeans phenotyping and the naming rules
 │   └── viz.py                  # Every figure
-├── synthetic_data/
-│   └── generate.py             # Generates All of Us-shaped CSVs locally; output not
-│                               # committed, and not read by the pipeline
 ├── dashboard/
 │   ├── app.py                  # Streamlit dashboard
 │   ├── requirements.txt
@@ -65,6 +62,7 @@ sleep-predict-capstone/
     ├── final_report.md         # The report, plus Appendices A–C (methodological
     │                           # asides, data flow, AI use)
     ├── final_report.pdf        # The same report, typeset
+    ├── poster.pdf              # The conference poster, 36 × 48 in
     └── figures/                # All publication figures
 ```
 
@@ -139,6 +137,17 @@ file, so it runs from any working directory.
 
 ---
 
+## 🖼️ The Poster
+
+**→ [`reports/poster.pdf`](reports/poster.pdf)**
+
+The 36 × 48 in conference poster: the question, the cohort, the model comparison, the two
+interpretation panels and both fairness results on one sheet, with QR codes to the deck and the
+dashboard. Its layout is generated rather than drawn, and the editable sources stay local — what
+ships here is the exported print file.
+
+---
+
 ## 🔬 Methods Overview
 
 | Component | Details |
@@ -150,7 +159,7 @@ file, so it runs from any working directory.
 | **Feature matrix** | 9 numeric columns + 8 one-hot dummies = 17, after leakage and collinearity pruning (max \|r\| 0.53, condition number 5.2) |
 | **Models** | Mean baseline, Ridge, Random Forest, HistGBM — all on the same matrix, 5-fold `KFold` CV |
 | **Interpretation** | Ridge coefficients (direction) + HistGBM permutation importance (reliance); no impurity importance |
-| **Clustering** | KMeans k=4 on four sleep-behaviour columns; inertia + silhouette selection |
+| **Clustering** | KMeans k=4 on four sleep-behavior columns; inertia + silhouette selection |
 | **Fairness evaluation** | Out-of-fold R² stratified by race/ethnicity and age band |
 | **Environment** | *All of Us* Researcher Workbench (Terra) for extraction; local for analysis. Python 3.11 |
 

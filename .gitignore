@@ -1,5 +1,4 @@
 # Environment
-.env
 *.env
 dashboard/.streamlit/secrets.toml
 
@@ -11,49 +10,32 @@ dashboard/.streamlit/secrets.toml
 data/
 
 # Exception — the aggregate dashboard tables are the only CSVs published.
-# synthetic_data/*.csv is deliberately NOT excepted: regenerate it with generate.py.
 !dashboard/*.csv
 
 # Python
 __pycache__/
 *.py[cod]
-*.egg-info/
-.eggs/
-dist/
-build/
 .venv/
-venv/
-env/
-
-# Tooling caches
 .mypy_cache/
-.pytest_cache/
-.ruff_cache/
 
 # Jupyter
 .ipynb_checkpoints/
-*.ipynb_checkpoints
-
-# Local scratch — Workbench replication drafts, not for publication
-workbench_env/
 
 # Kept locally, not published — regeneration tooling and internal memos
 scripts/
 reports/analysis_corrections.md
 
-# fig_ai_workflow.png was ignored while the AI statement was a separate local
-# file. That statement is now Appendix C of final_report.md, which is published,
-# so the figure has to ship with it or Figure A6 renders broken.
+# The synthetic generator mirrors the All of Us schema for local experimentation,
+# but nothing in the pipeline reads it and its output is never committed.
+synthetic_data/
+
+# The exported poster ships as reports/poster.pdf; everything upstream of it
+# stays local, the same way scripts/ does.
+poster/
 
 # Built by .github/workflows/deploy-pages.yml
 _site/
 
-# OS
+# OS and editor
 .DS_Store
-Thumbs.db
-.Rhistory
-.RData
-
-# IDE
 .vscode/
-.idea/
