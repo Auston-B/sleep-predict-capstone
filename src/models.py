@@ -26,19 +26,17 @@ from sklearn.preprocessing import StandardScaler
 
 
 # ── The column contract ───────────────────────────────────────────────────────
-# Two views of the model matrix, plus three lists of what stays out of it. All are
+# Two views of the model matrix and three lists of what stays out of it. All are
 # built by features.make_model_features().
 #
 #   FEATURE_COLS      numeric inputs
 #   ENCODE_COLS       categoricals one-hot encoded beside them
-#   GROUP_COLS        fairness strata — audited, never fitted
+#   GROUP_COLS        fairness strata for auditing
 #   LEAKY_COLS        functions of the same nightly distribution as the targets
-#   CATEGORICAL_COLS  not part of the contract: the recoded demographics, for
+#   CATEGORICAL_COLS  not part of the contract: the recoded demographics for
 #                     describing the cohort. data_extraction.ipynb imports it.
 
-# Activity is two columns and wear time is one; the rest of both blocks was dropped
-# for collinearity, taking the largest pairwise |r| from 0.99 to 0.53 and the
-# condition number from 24.5 to 5.2. notebooks/analysis.ipynb §4 has the working.
+# Derived from analysis.ipynb: the features that survive the correlation and condition-number rules.
 FEATURE_COLS = [
     "age", "bmi",
     "log_steps",        # activity level
@@ -48,16 +46,10 @@ FEATURE_COLS = [
     "education_num", "health_num", "income_num",
 ]
 
-# Unordered only. The ordered survey variables are already numeric above, and
-# encoding one both ways makes the design matrix singular.
 ENCODE_COLS = ["gender", "race_ethnicity"]
 
-# No overlap with FEATURE_COLS: a model trained on a group flag would be auditing
-# its own input.
 GROUP_COLS = ["age_band", "race_ethnicity"]
 
-# A model given these predicts a target largely from itself. prepare_X_y()
-# intersects FEATURE_COLS with the columns present, so dropping them is enough.
 LEAKY_COLS = ["pct_short_sleep", "pct_long_sleep", "iqr_sleep_hrs"]
 
 CATEGORICAL_COLS = [
@@ -71,8 +63,7 @@ def prepare_X_y(features_df: pd.DataFrame, target: str) -> tuple[pd.DataFrame, p
     Build the feature matrix and target vector.
 
     Missing values are left as NaN for the pipeline's imputer to fill inside each
-    fold — filling them here would compute the median over train and test together
-    and leak it across every split.
+    fold.
 
     X comes back float64 throughout: the All of Us frame carries nullable
     Int64/Float64, which numpy turns into object arrays once pd.NA is present.
@@ -95,10 +86,7 @@ def prepare_X_y(features_df: pd.DataFrame, target: str) -> tuple[pd.DataFrame, p
 
 def max_correlations(X: pd.DataFrame) -> pd.Series:
     """
-    Each column's largest absolute correlation with any other, highest first.
-
-    The collinearity rule: a column whose strongest partner is above 0.9 is
-    measuring something another column already measures.
+    Each column's largest absolute correlation with any other.
     """
     corr = X.astype("float64").corr().abs().to_numpy(copy=True)
     np.fill_diagonal(corr, 0)
@@ -109,13 +97,6 @@ def max_correlations(X: pd.DataFrame) -> pd.Series:
 def condition_number(X: pd.DataFrame) -> float:
     """
     Condition number of the median-filled, standardized design matrix.
-
-    Reported alongside the pairwise rule as corroboration rather than as a second
-    criterion: on this feature set it never crossed its own alarm at 30, so every
-    drop was made by the correlation rule.
-
-    Missing values are median-filled here as a diagnostic convenience. Do not copy
-    that into the modelling path, where imputation belongs inside the CV fold.
     """
     Z = X.astype("float64")
     Z = Z.fillna(Z.median())
@@ -127,9 +108,9 @@ def condition_number(X: pd.DataFrame) -> float:
 # ── Models ────────────────────────────────────────────────────────────────────
 
 def _pipe(model, scale: bool = False, impute: bool = True) -> Pipeline:
-    """Wrap an estimator with median imputation, and scaling where it matters.
+    """Wrap an estimator with median imputation, and scaling where necessary.
 
-    Imputation lives here rather than in prepare_X_y() so the fill value is learned
+    Imputation here rather than in prepare_X_y() so the fill value is learned
     from the training fold only. The final step is always named "model", which is
     how coefficients() reaches the estimator inside a fitted pipeline.
     """
@@ -140,18 +121,12 @@ def _pipe(model, scale: bool = False, impute: bool = True) -> Pipeline:
     return Pipeline(steps)
 
 
-def get_models(names: list = None) -> dict[str, Pipeline]:
+def get_models() -> dict[str, Pipeline]:
     """
-    Named model pipelines: a reference point, a regularized linear model, bagged
-    trees, boosted trees. Pass `names` to restrict the result, in that order.
-
-    Every call builds the pipelines fresh, so a returned model is always unfitted.
-
-    Lasso and ElasticNet are not here — they score worse than Ridge on every metric
-    and both targets, which is what you would expect given there is nothing in this
-    feature set for an L1 penalty to select away.
+    Named model pipelines. Every call builds the pipelines fresh, 
+    so a returned model is always unfitted.
     """
-    models = {
+    return {
         "Baseline (mean)": _pipe(DummyRegressor(strategy="mean")),
 
         # RidgeCV over alphas 1e-3 to 1e3 ties alpha=1.0, so it is left untuned.
@@ -167,58 +142,47 @@ def get_models(names: list = None) -> dict[str, Pipeline]:
                                  impute=False),   # handles NaN natively
     }
 
-    if names is None:
-        return models
-
-    unknown = [n for n in names if n not in models]
-    if unknown:
-        raise KeyError(f"unknown model name(s) {unknown}; available: {list(models)}")
-
-    return {n: models[n] for n in names}
-
 
 def get_model(name: str) -> Pipeline:
-    """One unfitted pipeline by name, for the common case of wanting a single model."""
-    return get_models([name])[name]
+    """One unfitted pipeline by name, for the case of wanting a single model."""
+    models = get_models()
+
+    if name not in models:
+        raise KeyError(f"unknown model {name!r}; available: {list(models)}")
+
+    return models[name]
 
 
-def coefficients(fitted_model, feature_names) -> pd.Series:
+def coefficients(fitted_model: Pipeline, feature_names) -> pd.Series:
     """
     A fitted linear model's coefficients, labelled by feature.
 
-    Accepts either a pipeline built by _pipe() — whose estimator is the step named
-    "model" — or a bare estimator.
+    Takes a pipeline built by _pipe(), whose estimator is the step named "model".
     """
-    estimator = getattr(fitted_model, "named_steps", {}).get("model", fitted_model)
+    estimator = fitted_model.named_steps["model"]
 
     return pd.Series(np.ravel(estimator.coef_), index=feature_names)
 
 
 # ── Cross-validation ──────────────────────────────────────────────────────────
 
-def _folds(n_splits: int = 5) -> KFold:
-    """The one fold configuration every scorer here uses.
+# The one fold configuration every scorer here uses. It is
+# participant-level because the frame is already one row per person.
+CV_FOLDS = KFold(n_splits=5, shuffle=True, random_state=42)
 
-    A plain KFold: it is participant-level because the frame is already one row per
-    person, not because the split is grouped.
+
+def oof_predictions(X: pd.DataFrame, y: pd.Series, model) -> pd.Series:
     """
-    return KFold(n_splits=n_splits, shuffle=True, random_state=42)
-
-
-def oof_predictions(X: pd.DataFrame, y: pd.Series, model, n_splits: int = 5) -> pd.Series:
-    """
-    Out-of-fold predictions, indexed like `y` — every row predicted by a model that
+    Out-of-fold predictions, indexed like `y`, every row predicted by a model that
     did not train on it.
-
-    cross_val_predict clones per fold, so the caller's model is left unfitted.
     """
-    return pd.Series(cross_val_predict(model, X, y, cv=_folds(n_splits)), index=y.index)
+    return pd.Series(cross_val_predict(model, X, y, cv=CV_FOLDS), index=y.index)
 
 
-def participant_cv(X: pd.DataFrame, y: pd.Series, model, n_splits: int = 5) -> dict:
+def participant_cv(X: pd.DataFrame, y: pd.Series, model) -> dict:
     """5-fold CV, returning mean RMSE, RMSE SD, MAE and R² across folds."""
     scores = cross_validate(
-        model, X, y, cv=_folds(n_splits),
+        model, X, y, cv=CV_FOLDS,
         scoring=["neg_root_mean_squared_error", "neg_mean_absolute_error", "r2"],
     )
     rmse = -scores["test_neg_root_mean_squared_error"]
@@ -231,19 +195,17 @@ def participant_cv(X: pd.DataFrame, y: pd.Series, model, n_splits: int = 5) -> d
     }
 
 
-def run_all_models(features_df: pd.DataFrame, target: str,
-                   estimators: dict = None) -> pd.DataFrame:
+def run_all_models(features_df: pd.DataFrame, target: str) -> pd.DataFrame:
     """
     Cross-validate every model and return a results table sorted by RMSE.
 
-    Defaults to all four from get_models(), so the only thing varying across the
-    table is the model.
+    Every model is scored on the same X and y, so the only thing varying across the
+    table is the estimator.
     """
     X, y = prepare_X_y(features_df, target)
-    estimators = get_models() if estimators is None else estimators
 
     results = []
-    for name, model in estimators.items():
+    for name, model in get_models().items():
         print(f"  Running {name}...")
         results.append({"Model": name, **participant_cv(X, y, model)})
 
@@ -257,30 +219,26 @@ def fairness_cv(
     target: str,
     model,
     subgroup_col: str,
-    n_splits: int = 5,
     min_n: int = 100,
 ) -> pd.DataFrame:
     """
-    Out-of-fold R² by subgroup — every participant scored by a model that did not
-    train on them. Subgroups smaller than `min_n` are skipped, since R² on a
-    handful of people is noise.
+    Out-of-fold R² by subgroup. Every participant scored by a model that did not
+    train on them. Subgroups smaller than `min_n` are skipped.
 
-    Each subgroup's R² uses that subgroup's own mean as the denominator, since
-    r2_score() derives it from the y it is handed. Because R² = 1 - MSE/Var(group),
+    Each subgroup's R² uses that subgroup's own mean as the denominator. Because R² = 1 - MSE/Var(group),
     a group whose outcome varies less must be predicted more precisely to score the
-    same — so compare groups to each other rather than to the overall figure.
+    same. Compare groups to each other rather than to the overall figure.
 
     Returns
     -------
     pd.DataFrame
-        subgroup, n, r2 — worst first, with the overall out-of-fold R² in
-        .attrs["overall_r2"].
+        subgroup, n, r2, overall out-of-fold R² in .attrs["overall_r2"].
     """
     X, y = prepare_X_y(features_df, target)
-    oof = oof_predictions(X, y, model, n_splits)
+    oof = oof_predictions(X, y, model)
 
     # prepare_X_y drops NaN-target rows but keeps the index, so subgroup labels
-    # realign by index. groupby drops unlabelled participants for us.
+    # realign by index. groupby drops unlabelled participants.
     groups = features_df.loc[y.index, subgroup_col]
 
     rows = [
@@ -299,12 +257,7 @@ def fairness_cv(
 def holdout_score(X: pd.DataFrame, y: pd.Series, model,
                   test_size: float = 0.2, random_state: int = 7) -> float:
     """
-    R² on a split the model never saw, scored against the *training* mean — the
-    test set's own mean is information the model did not have.
-
-    A sanity check on the CV figures, not a replacement for them: a single 20%
-    split varies by more than the selection optimism it is looking for. Settling
-    that properly would need nested CV.
+    R² on a split the model never saw, scored against the training mean.
     """
     X_tr, X_te, y_tr, y_te = train_test_split(
         X, y, test_size=test_size, random_state=random_state)
@@ -321,14 +274,8 @@ def permutation_scores(X: pd.DataFrame, y: pd.Series, model, n_repeats: int = 5,
     How much R² each feature is worth, highest first.
 
     Fits on a training split, then shuffles one column of the held-out split at a
-    time and measures the drop in R². Unlike a tree's built-in
-    `feature_importances_`, this does not inflate columns simply for having many
-    distinct values, and it works for any estimator — including HistGBM, which
-    exposes no importances at all.
-
-    It answers "what is lost if this feature goes", which is not the same question
-    as "what does this feature explain on its own". A column can score low here and
-    still carry signal, if another column covers for it.
+    time and measures the drop in R². Does not inflate columns for having many
+    distinct values, and it works for HistGBM.
     """
     X_tr, X_te, y_tr, y_te = train_test_split(
         X, y, test_size=test_size, random_state=random_state)

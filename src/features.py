@@ -6,8 +6,7 @@ Cleaning and feature engineering for the *All of Us* sleep analysis.
 Takes the night and day-level extracts through the inclusion rules and
 aggregates them to one row per participant.
 
-make_model_features(), at the bottom, derives the modelling columns from that
-already-aggregated frame — it never sees a night or a day.
+make_model_features(), at the bottom, derives the modelling columns from the aggregated frame.
 """
 
 import numpy as np
@@ -15,15 +14,13 @@ import pandas as pd
 
 
 # ── Inclusion thresholds ──────────────────────────────────────────────────────
-# A night outside these bounds is more likely a partial wear or a tracker artifact
-# than a real main-sleep record.
+# A night outside these bounds is more likely a partial wear or a tracker artifact.
 MIN_SLEEP_HRS  = 4
 MAX_SLEEP_HRS  = 12
 MIN_VALID_RATE = 0.70      # share of a participant's nights that must be in range
 
-# Two night floors, both applied during extraction. The first admits a night to the
-# cleaned frame; the second decides whose targets are measured precisely enough to
-# model.
+# Two night floors. The first admits a night to the cleaned frame; 
+# the second decides whose targets are measured precisely enough to model.
 MIN_EXTRACT_NIGHTS = 4     # applied by clean_sleep()
 MIN_MODEL_NIGHTS   = 30    # applied by restrict_to_measured()
 
@@ -35,14 +32,12 @@ ACTIVE_STEPS = 7_500       # CDC's "somewhat active" threshold
 
 # Fitbit moved to PPG-based sleep staging in 2017, and nights either side of that
 # are not the same measurement. Applied before the duration and validity rules so
-# those judge a participant on the window being analysed. Pass start_date=None to
-# keep the full history.
+# those judge a participant on the window being analysed.
 MIN_SLEEP_DATE = "2017-01-01"
 
 
 # ── Demographic recoding maps ─────────────────────────────────────────────────
-# Survey answers arrive as raw concept strings. Anything absent from a map becomes
-# NaN, so a new answer surfaces as missing rather than as a silent new category.
+# Survey answers arrive as raw concept strings. Anything absent from a map becomes NaN.
 
 GENDER_MAP = {
     "Female": "Female",
@@ -99,16 +94,7 @@ HEALTH_MAP = {
 }
 HEALTH_ORDER = ["Poor", "Fair", "Good", "Very good", "Excellent"]
 
-# Recoded in place: (column, map, ordered categories or None). Ordered categoricals
-# keep plots and sorts in real order.
-RECODES = [
-    ("gender",            GENDER_MAP,     None),
-    ("education",         EDUCATION_MAP,  EDUCATION_ORDER),
-    ("employment",        EMPLOYMENT_MAP, None),
-    ("self_rated_health", HEALTH_MAP,     HEALTH_ORDER),
-]
-
-# The same three ordered categoricals again, as (source, numeric column). Linear
+# The three ordered categoricals again, as (source, numeric column). Linear
 # models see the ordering rather than a set of unordered dummies; the categorical
 # originals stay for grouping and description. Applied by make_model_features().
 ORDINALS = [("education",         "education_num"),
@@ -122,64 +108,67 @@ AGE_BAND_LABELS = ["18-40", "41-60", "61-80", "81+"]
 
 # ── Sleep cleaning ────────────────────────────────────────────────────────────
 
-def _prep_sleep(df: pd.DataFrame) -> pd.DataFrame:
-    """Add the derived columns the inclusion rules test."""
+def _keep_people(df: pd.DataFrame, stat: pd.Series, minimum) -> pd.DataFrame:
+    """Keep rows whose participant meets `minimum` on `stat`, a per-person Series."""
+    return df[df["person_id"].isin(stat[stat >= minimum].index)]
+
+
+def _stage_count(label: str, df: pd.DataFrame) -> dict:
+    """One funnel row: the rule's label, and what is left after it."""
+    return {"stage": label, "nights": len(df), "people": df["person_id"].nunique()}
+
+
+def _apply_sleep_rules(df: pd.DataFrame) -> tuple[pd.DataFrame, list]:
+    """
+    Apply the inclusion rules in order, counting what each one costs.
+
+    Returns the surviving nights and the funnel rows. clean_sleep() takes the
+    frame and sleep_funnel() takes the rows.
+    """
     df = df.copy()
     # astype rather than pd.to_datetime: on the dbdate column BigQuery returns,
     # to_datetime converts element-wise.
     df["sleep_date"] = df["sleep_date"].astype("datetime64[ns]")
     df["hours_asleep"] = df["minute_asleep"] / 60
     df["valid_night"] = df["hours_asleep"].between(MIN_SLEEP_HRS, MAX_SLEEP_HRS)
-    return df
+
+    rows = [_stage_count("nights extracted", df)]
+
+    df = df[df["sleep_date"] >= pd.Timestamp(MIN_SLEEP_DATE)]
+    rows.append(_stage_count(f"on/after {MIN_SLEEP_DATE}", df))
+
+    df = df[df["is_main_sleep"] == True]
+    rows.append(_stage_count("main sleep only", df))
+
+    # Ahead of the duration bound below, so the rate is judged on every night the
+    # participant recorded, in range or not.
+    df = _keep_people(df, df.groupby("person_id")["valid_night"].mean(), MIN_VALID_RATE)
+    rows.append(_stage_count(f"participants >={MIN_VALID_RATE:.0%} valid", df))
+
+    df = df[df["valid_night"]]
+    rows.append(_stage_count(f"nights within {MIN_SLEEP_HRS}-{MAX_SLEEP_HRS} h", df))
+
+    df = _keep_people(df, df.groupby("person_id").size(), MIN_EXTRACT_NIGHTS)
+    rows.append(_stage_count(f">={MIN_EXTRACT_NIGHTS} valid nights", df))
+
+    return df, rows
 
 
-def _keep_people(df: pd.DataFrame, stat: pd.Series, minimum) -> pd.DataFrame:
-    """Keep rows whose participant meets `minimum` on `stat`, a per-person Series."""
-    return df[df["person_id"].isin(stat[stat >= minimum].index)]
-
-
-def _sleep_stages(start_date: str) -> list:
-    """The inclusion rules, in order, as (label, filter) pairs.
-
-    clean_sleep() applies them and returns the frame; sleep_funnel() applies the
-    same list and reports what each one costs.
+def clean_sleep(df: pd.DataFrame) -> pd.DataFrame:
     """
-    stages = []
-    if start_date is not None:
-        cutoff = pd.Timestamp(start_date)
-        stages.append((f"on/after {start_date}", lambda d: d[d["sleep_date"] >= cutoff]))
-
-    return stages + [
-        ("main sleep only",
-         lambda d: d[d["is_main_sleep"] == True]),
-        (f"participants >={MIN_VALID_RATE:.0%} valid",
-         lambda d: _keep_people(d, d.groupby("person_id")["valid_night"].mean(),
-                                MIN_VALID_RATE)),
-        (f"nights within {MIN_SLEEP_HRS}-{MAX_SLEEP_HRS} h",
-         lambda d: d[d["valid_night"]]),
-        (f">={MIN_EXTRACT_NIGHTS} valid nights",
-         lambda d: _keep_people(d, d.groupby("person_id").size(), MIN_EXTRACT_NIGHTS)),
-    ]
-
-
-def clean_sleep(df: pd.DataFrame, start_date: str = MIN_SLEEP_DATE) -> pd.DataFrame:
-    """
-    Apply the inclusion rules listed in _sleep_stages().
+    Apply the inclusion rules and return the nights that survive them.
 
     The duration bounds are applied here rather than at extraction time so the
-    validity rule can see the out-of-range nights. Pass start_date=None to keep the
-    full history.
+    validity rule can see the out-of-range nights.
 
     Takes person_id, sleep_date, is_main_sleep, minute_asleep; returns person_id,
-    sleep_date, hours_asleep — one row per retained night.
+    sleep_date, hours_asleep; one row per retained night.
     """
-    df = _prep_sleep(df)
-    for _, rule in _sleep_stages(start_date):
-        df = rule(df)
-    return df[["person_id", "sleep_date", "hours_asleep"]]
+    clean, _ = _apply_sleep_rules(df)
+    return clean[["person_id", "sleep_date", "hours_asleep"]]
 
 
-def sleep_funnel(df: pd.DataFrame, start_date: str = MIN_SLEEP_DATE) -> pd.DataFrame:
+def sleep_funnel(df: pd.DataFrame) -> pd.DataFrame:
     """
     Report what each clean_sleep() rule costs.
 
@@ -188,17 +177,9 @@ def sleep_funnel(df: pd.DataFrame, start_date: str = MIN_SLEEP_DATE) -> pd.DataF
     pd.DataFrame
         stage, nights, people, people_lost
     """
-    df = _prep_sleep(df)
-    stages = [("nights extracted", df)]
+    _, rows = _apply_sleep_rules(df)
 
-    for label, rule in _sleep_stages(start_date):
-        df = rule(df)
-        stages.append((label, df))
-
-    funnel = pd.DataFrame([
-        {"stage": label, "nights": len(frame), "people": frame["person_id"].nunique()}
-        for label, frame in stages
-    ])
+    funnel = pd.DataFrame(rows)
     funnel["people_lost"] = funnel["people"].diff().fillna(0).astype(int)
 
     return funnel
@@ -206,19 +187,17 @@ def sleep_funnel(df: pd.DataFrame, start_date: str = MIN_SLEEP_DATE) -> pd.DataF
 
 # ── Steps cleaning ────────────────────────────────────────────────────────────
 
-def clean_steps(df: pd.DataFrame, start_date: str = MIN_SLEEP_DATE) -> pd.DataFrame:
+def clean_steps(df: pd.DataFrame) -> pd.DataFrame:
     """
     Apply the activity inclusion rules to a person_id / date / steps frame: the
     analysis window, step bounds, and a minimum of MIN_DAYS valid days per
     participant. The window is shared with clean_sleep() rather than being
-    activity-specific; pass start_date=None to disable it.
+    activity-specific.
     """
     df = df.copy()
-    df["date"] = df["date"].astype("datetime64[ns]")   # see _prep_sleep on the cast
+    df["date"] = df["date"].astype("datetime64[ns]")   # see _apply_sleep_rules on the cast
 
-    if start_date is not None:
-        df = df[df["date"] >= pd.Timestamp(start_date)]
-
+    df = df[df["date"] >= pd.Timestamp(MIN_SLEEP_DATE)]
     df = df[(df["steps"] >= MIN_STEPS) & (df["steps"] < MAX_STEPS)]
 
     return _keep_people(df, df.groupby("person_id").size(), MIN_DAYS)
@@ -226,14 +205,10 @@ def clean_steps(df: pd.DataFrame, start_date: str = MIN_SLEEP_DATE) -> pd.DataFr
 
 # ── Demographic cleaning ──────────────────────────────────────────────────────
 
-def _recode(series: pd.Series, mapping: dict, order: list = None):
-    """Map through `mapping`, optionally as an ordered Categorical.
-    """
-
-    already_recoded = {value: value for value in mapping.values()}
-
-    mapped = series.map({**mapping, **already_recoded})
-    return pd.Categorical(mapped, categories=order, ordered=True) if order else mapped
+def _ordered(series: pd.Series, mapping: dict, order: list) -> pd.Categorical:
+    """Map through `mapping` as an ordered Categorical, so plots and sorts come
+    out in survey order rather than alphabetically."""
+    return pd.Categorical(series.map(mapping), categories=order, ordered=True)
 
 
 def _binary(series: pd.Series, true_value) -> pd.Series:
@@ -259,35 +234,27 @@ def clean_demographics(demo_df: pd.DataFrame) -> pd.DataFrame:
     """
     Recode the raw survey demographics into model and plot-ready categories.
 
-    Same rows out. Collapses `race`/`ethnicity` into `race_ethnicity`, buckets
-    `income_bracket` into `income_tier`, and normalizes the rest through RECODES.
-    Absent columns are skipped.
+    Same rows out. Collapses `race`/`ethnicity` into `race_ethnicity` and buckets
+    `income_bracket` into `income_tier`.
     """
     df = demo_df.copy()
 
-    for col, mapping, order in RECODES:
-        if col in df.columns:
-            df[col] = _recode(df[col], mapping, order)
+    df["gender"]     = df["gender"].map(GENDER_MAP)
+    df["employment"] = df["employment"].map(EMPLOYMENT_MAP)
 
-    # Race and ethnicity are largely redundant in All of Us, and participants who
+    df["education"]         = _ordered(df["education"], EDUCATION_MAP, EDUCATION_ORDER)
+    df["self_rated_health"] = _ordered(df["self_rated_health"], HEALTH_MAP, HEALTH_ORDER)
+
+    # Race and ethnicity are largely redundant in All of Us. Participants who
     # report Hispanic/Latino ethnicity frequently skip the race question. Mapping
     # race first and letting ethnicity overwrite it keeps them in a real category
     # instead of "Unknown".
-    if "race" in df.columns:
-        race_ethnicity = _recode(df["race"], RACE_MAP)
+    hispanic = df["ethnicity"].eq("Hispanic or Latino")
+    df["race_ethnicity"] = df["race"].map(RACE_MAP).where(~hispanic, "Hispanic or Latino")
 
-        if "ethnicity" in df.columns:
-            hispanic = df["ethnicity"].eq("Hispanic or Latino")
-            race_ethnicity = race_ethnicity.where(~hispanic, "Hispanic or Latino")
+    df["income_tier"] = _ordered(df["income_bracket"], INCOME_TIER_MAP, INCOME_TIER_ORDER)
 
-        df["race_ethnicity"] = race_ethnicity
-        df = df.drop(columns=[c for c in ("race", "ethnicity") if c in df.columns])
-
-    if "income_bracket" in df.columns:
-        df["income_tier"] = _recode(df["income_bracket"], INCOME_TIER_MAP, INCOME_TIER_ORDER)
-        df = df.drop(columns=["income_bracket"])
-
-    return df
+    return df.drop(columns=["race", "ethnicity", "income_bracket"])
 
 
 # ── Participant-level feature engineering ─────────────────────────────────────
@@ -356,22 +323,17 @@ def make_model_features(features_df: pd.DataFrame) -> pd.DataFrame:
     """
     Derive the modelling columns from a participant-level frame.
 
-    Pure and idempotent: returns a copy, adds columns only, and re-running it on
-    its own output is a no-op.
-
-    Adds everything in models.FEATURE_COLS that is not already in the pickle, plus
+    Adds everything in models.FEATURE_COLS not already in the pickle, plus
     `age_band` for models.GROUP_COLS.
     """
     df = features_df.copy()
 
     steps = df["mean_daily_steps"].astype("float64")
 
-    # The activity-sleep relationship is curved, so the log form predicts better
-    # than raw steps.
+    # The activity-sleep relationship is curved, so the log form predicts better.
     df["log_steps"] = np.log1p(steps)
 
-    # Raw std_daily_steps tracks activity volume while this
-    # ratio isolates irregularity.
+    # The ratio isolates step irregularity.
     df["steps_cv"] = df["std_daily_steps"].astype("float64") / steps
 
     # gender is left to the dummies in models.ENCODE_COLS
@@ -382,7 +344,7 @@ def make_model_features(features_df: pd.DataFrame) -> pd.DataFrame:
         if src in df.columns:
             df[dst] = _ordinal(df[src])
 
-    # Fairness stratum. race_ethnicity is already a column and needs no derivation.
+    # Fairness stratum
     df["age_band"] = pd.cut(df["age"].astype("float64"), bins=AGE_BANDS,
                             labels=AGE_BAND_LABELS, ordered=True)
 

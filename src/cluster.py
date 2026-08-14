@@ -5,7 +5,7 @@ KMeans over a participant's sleep behaviour, on the participant-level frame
 produced by features.make_model_features().
 
 Matrix assembly, the scaler-KMeans pipeline, a scan over k, and the naming rules
-that turn KMeans' arbitrary label integers into the four phenotypes.
+of the four phenotypes.
 """
 
 import numpy as np
@@ -20,15 +20,14 @@ from sklearn.preprocessing import StandardScaler
 # CLUSTER_COLS  what the distance metric sees: duration, night-to-night spread,
 #               and the two tails. Complete on the >=30-night cohort, so nothing
 #               is imputed.
-# PROFILE_COLS  described afterwards, never fitted — the same audited/not-fitted
-#               split as models.GROUP_COLS.
+# PROFILE_COLS  described afterwards, never fitted.
 
 CLUSTER_COLS = ["mean_sleep_hrs", "std_sleep_hrs", "pct_short_sleep", "pct_long_sleep"]
 
 PROFILE_COLS = ["iqr_sleep_hrs", "mean_daily_steps", "age", "bmi", "n_valid_nights"]
 
 # The four archetypes, in the order every table and legend presents them. viz.py
-# imports this list, so the names and the order are defined once.
+# imports this list.
 PHENOTYPES = [
     "Consistent Good Sleepers",
     "Chronic Short & Variable",
@@ -36,8 +35,7 @@ PHENOTYPES = [
     "Variable Long Sleepers",
 ]
 
-# How a centroid is recognized, applied in order, each rule choosing among the
-# clusters the earlier ones did not claim. Least ambiguous distinction first; the
+# How a centroid is recognized, applied in order. Least ambiguous distinction first; the
 # leftover cluster takes the remaining name. See name_clusters().
 NAMING_RULES = [
     ("Variable Long Sleepers",   lambda c: c["mean_sleep_hrs"].idxmax()),
@@ -76,31 +74,21 @@ def prepare_cluster_matrix(df: pd.DataFrame) -> pd.DataFrame:
     return X.dropna()
 
 
-def _kmeans_pipe(k: int, random_state: int = RANDOM_STATE,
-                 n_init: int = N_INIT) -> Pipeline:
-    """Standardize, then KMeans. The final step is always named "kmeans".
-
-    Scaling is not optional here as it is in models._pipe: the four columns run
-    from proportions on 0-1 to hours in the single digits, and unscaled the
-    distance metric would be `mean_sleep_hrs` and nothing else.
+def fit_clusters(X: pd.DataFrame, k: int = 4) -> Pipeline:
+    """
+    Standardize, then KMeans, fitted on a prepared matrix. The final step is always
+    named "kmeans", which is how centroids() and assign_clusters() reach the estimator.
     """
     return Pipeline([
         ("scaler", StandardScaler()),
-        ("kmeans", KMeans(n_clusters=k, n_init=n_init, random_state=random_state)),
-    ])
-
-
-def fit_clusters(X: pd.DataFrame, k: int = 4, random_state: int = RANDOM_STATE) -> Pipeline:
-    """Fit the scaler-KMeans pipeline on a prepared matrix."""
-    return _kmeans_pipe(k, random_state=random_state).fit(X)
+        ("kmeans", KMeans(n_clusters=k, n_init=N_INIT, random_state=RANDOM_STATE)),
+    ]).fit(X)
 
 
 def centroids(pipe: Pipeline) -> pd.DataFrame:
     """
     Cluster centroids back in original units, one row per cluster label.
-
     KMeans fits on the standardized matrix, so its `cluster_centers_` are in SDs.
-    Inverting the scaler puts them back in hours and proportions.
     """
     km = pipe.named_steps["kmeans"]
     raw = pipe.named_steps["scaler"].inverse_transform(km.cluster_centers_)
@@ -114,11 +102,7 @@ def centroids(pipe: Pipeline) -> pd.DataFrame:
 def name_clusters(centroids_df: pd.DataFrame) -> dict[int, str]:
     """
     Map KMeans label integers to the phenotype names.
-
-    The integers themselves carry no meaning — they depend on the seed and on the
-    sklearn version — so every downstream table would shuffle between runs if the
-    names were assigned by index. NAMING_RULES resolves them from centroid
-    position instead.
+    The integers themselves carry no meaning.
     """
     if len(centroids_df) != 4:
         raise ValueError(
@@ -138,19 +122,15 @@ def name_clusters(centroids_df: pd.DataFrame) -> dict[int, str]:
     return names
 
 
-def assign_clusters(df: pd.DataFrame, k: int = 4,
-                    random_state: int = RANDOM_STATE) -> pd.Series:
+def assign_clusters(df: pd.DataFrame, k: int = 4) -> pd.Series:
     """
-    Prepare, fit, and label in one call.
+    Prepare, fit, and label clusters.
 
     At k=4 this returns the phenotype names as an ordered Categorical; at any
     other k the naming rules do not apply and it returns the raw label integers.
-    Either way the result is indexed like `df` — NaN for any participant dropped
-    by prepare_cluster_matrix() — so it can be handed straight to groupby or to a
-    plotting function alongside the frame it came from.
     """
     X = prepare_cluster_matrix(df)
-    pipe = fit_clusters(X, k=k, random_state=random_state)
+    pipe = fit_clusters(X, k=k)
     labels = pd.Series(pipe.named_steps["kmeans"].labels_, index=X.index)
 
     if k != 4:
@@ -166,7 +146,7 @@ def assign_clusters(df: pd.DataFrame, k: int = 4,
 # ── Choosing k ────────────────────────────────────────────────────────────────
 
 def scan_k(X: pd.DataFrame, ks=range(2, 9), sample_n: int = 10_000,
-           random_state: int = RANDOM_STATE, subsample_seed: int = 0) -> pd.DataFrame:
+           subsample_seed: int = 0) -> pd.DataFrame:
     """
     Fit each k and score it two ways.
 
@@ -178,25 +158,17 @@ def scan_k(X: pd.DataFrame, ks=range(2, 9), sample_n: int = 10_000,
     Inertia is the quantity KMeans minimizes. Silhouette weighs each point's
     own cluster against the nearest rival.
 
-    Silhouette is computed on a fixed random subsample of `sample_n` rows: it
-    needs the full pairwise distance matrix, which at n = 45,259 is about 16 GB.
-    Inertia uses everyone. Pass sample_n=None to score all of them if the memory
-    is there.
-
-    `subsample_seed` draws that subsample and is deliberately not RANDOM_STATE:
-    it seeds which participants are scored, not how KMeans is fitted, and the
-    published silhouettes were computed at 0. Changing it moves them slightly.
+    Silhouette is computed on a fixed random subsample of `sample_n` rows.
+    `subsample_seed` draws that subsample and is deliberately not RANDOM_STATE.
     """
     Z = StandardScaler().fit_transform(X)
 
-    if sample_n and sample_n < len(Z):
-        idx = np.random.default_rng(subsample_seed).choice(len(Z), sample_n, replace=False)
-    else:
-        idx = np.arange(len(Z))
+    idx = np.random.default_rng(subsample_seed).choice(
+        len(Z), min(sample_n, len(Z)), replace=False)
 
     rows = []
     for k in ks:
-        km = KMeans(n_clusters=k, n_init=N_INIT, random_state=random_state).fit(Z)
+        km = KMeans(n_clusters=k, n_init=N_INIT, random_state=RANDOM_STATE).fit(Z)
 
         rows.append({
             "k": k,
@@ -212,18 +184,17 @@ def scan_k(X: pd.DataFrame, ks=range(2, 9), sample_n: int = 10_000,
 def cluster_profile(df: pd.DataFrame, labels: pd.Series) -> pd.DataFrame:
     """
     Describe the clusters in terms of their size, share, and the mean of each
-    feature — the clustering columns first, then the profile-only ones.
+    feature. The clustering columns first, then the profile-only ones.
     """
-    cols = [c for c in CLUSTER_COLS + PROFILE_COLS if c in df.columns]
+    cols = CLUSTER_COLS + PROFILE_COLS
 
     grouped = df[cols].astype("float64").groupby(labels, observed=True)
     profile = grouped.mean()
     profile.insert(0, "N", grouped.size())
     profile.insert(1, "pct", (profile["N"] / len(labels.dropna()) * 100).round(1))
 
-    if "gender" in df.columns:
-        profile["pct_female"] = (
-            df["gender"].eq("Female").groupby(labels, observed=True).mean()
-        )
+    profile["pct_female"] = (
+        df["gender"].eq("Female").groupby(labels, observed=True).mean()
+    )
 
     return profile

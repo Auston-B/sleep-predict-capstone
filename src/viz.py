@@ -3,13 +3,10 @@ viz.py
 ------
 Plotting for the sleep health analysis.
 
-The house style is matplotlib's stock `fivethirtyeight` stylesheet and seaborn
-does the aggregating and faceting, so all that is left here is a few helpers —
-`use_style()`, `label()`, `refline()`, `finish()`, `save_figure()` — and plot
-functions that are optional prep, one seaborn call, and `finish()`.
+The style is matplotlib's stock `fivethirtyeight` stylesheet and seaborn
+does the aggregating and faceting.
 
-Every function returns a `matplotlib.figure.Figure`, so a notebook renders one by
-making the call its last expression.
+Every function returns a `matplotlib.figure.Figure`.
 """
 
 from pathlib import Path
@@ -28,13 +25,14 @@ SOURCE = "Source: All of Us Research Program CDR v9 · SIADS 699"
 SLEEP_GUIDELINE = 7.0    # hours; the reference every duration axis is read against
 FIGSIZE = (11, 5.5)      # the default single-panel figure
 
+# The two outcomes, in the order every two-panel figure lays them out.
+TARGET_COLS = ("target_sleep_duration", "target_sleep_consistency")
+
 _MUTED, _FAINT, _INK = "#6e6e6e", "#b0b0b0", "#3c3c3c"
 
 
 # ── Labels ────────────────────────────────────────────────────────────────────
-# Kept short: these land on tick labels and heatmap axes, where a long name either
-# overlaps its neighbour or forces the figure wider. Anything unlisted falls
-# through the dummy-prefix rule and then to its raw column name.
+# Anything unlisted falls through to its raw column name.
 
 LABELS = {
     "target_sleep_duration":    "Sleep duration (hrs)",
@@ -66,7 +64,7 @@ LABELS = {
     "self_rated_health":  "Self-rated health",
     "race_ethnicity":     "Race/Ethnicity",
     "age_band":           "Age band",
-    # One-hot columns; the prefix is dropped where the level says it on its own.
+    # One-hot columns; the prefix is dropped.
     "gender_Male":                              "Male",
     "gender_Other":                             "Gender: other",
     "race_ethnicity_Black or African American": "Race/Ethnicity: Black",
@@ -74,16 +72,13 @@ LABELS = {
     "race_ethnicity_More than one population":  "Multiracial",
     "race_ethnicity_Other":                     "Race/Ethnicity: other",
     "race_ethnicity_Unknown":                   "Race/Ethnicity: unknown",
-    # race_ethnicity_White is absent on purpose: the rule below already renders it
-    # exactly as it should read, so listing it would only be a second place to
-    # keep in step.
 }
 
 _DUMMY_PREFIXES = {"gender": "Gender", "race_ethnicity": "Race/Ethnicity"}
 
 
 def label(col: str) -> str:
-    """A column name as a reader should see it."""
+    """A column name."""
     if col in LABELS:
         return LABELS[col]
 
@@ -97,10 +92,9 @@ def label(col: str) -> str:
 # ── Style and helpers ─────────────────────────────────────────────────────────
 
 def use_style() -> None:
-    """Apply the stock 538 stylesheet and hand its cycler to seaborn.
+    """Apply the stock 538 stylesheet and hand to seaborn.
 
-    Re-callable: anything that changes rcParams after import — a dark notebook
-    theme, another stylesheet — is undone by calling this again.
+    Anything that changes rcParams after import is undone by calling this again.
     """
     # "default" first, so no earlier theme leaks through. The 538 sheet only
     # overrides what it names, and it names no text colour at all.
@@ -113,7 +107,7 @@ def use_style() -> None:
         # #f0f0f0. Pin them.
         "text.color": _INK, "axes.labelcolor": _INK, "axes.titlecolor": _INK,
         "xtick.color": _MUTED, "ytick.color": _MUTED,
-        # Tuned for one full-width panel; too heavy once a figure carries facets.
+        # Tuned for one full-width panel.
         "lines.linewidth": 2.5, "font.size": 11, "axes.titlesize": "medium",
         "figure.dpi": 110, "savefig.dpi": 200,
     })
@@ -121,11 +115,8 @@ def use_style() -> None:
 
 use_style()
 
-# The four cycler slots the plots name directly — taken after use_style() has run,
-# so no colour is defined in this file. PHENOTYPE_PALETTE only says which slot each
-# phenotype takes, which is what keeps green/red/blue/amber on the same four names
-# dashboard/app.py uses. The stylesheet's cycler is fixed, so re-calling use_style()
-# would reproduce these exact colours.
+# The four cycler slots the plots name directly. PHENOTYPE_PALETTE only says which slot each
+# phenotype takes, so the colours are consistent across plots even if the order of the legend changes.
 BLUE, RED, AMBER, GREEN = sns.color_palette()[:4]
 PHENOTYPE_PALETTE = dict(zip(PHENOTYPES, [GREEN, RED, BLUE, AMBER]))
 
@@ -134,8 +125,7 @@ def finish(fig, title: str, subtitle: str = None, source: str = SOURCE):
     """Add the title / subtitle / source stack, then close the figure.
 
     The last line of every plot function here. Closing is what stops the inline
-    backend drawing the figure twice, once on cell flush and once from the
-    returned object's repr.
+    backend drawing the figure twice.
     """
     h = fig.get_figheight()
 
@@ -153,8 +143,7 @@ def finish(fig, title: str, subtitle: str = None, source: str = SOURCE):
 
 
 def refline(ax, x: float = None, y: float = None, text: str = None) -> None:
-    """A dashed reference line and its label, placed by rule rather than by
-    argument: vertical lines label at the top, horizontal ones at the right."""
+    """A dashed reference line and its label: vertical lines label at the top, horizontal ones at the right."""
     if x is not None:
         ax.axvline(x, ls="--", lw=1.4, color=_INK)
         if text:
@@ -168,11 +157,7 @@ def refline(ax, x: float = None, y: float = None, text: str = None) -> None:
 
 
 def save_figure(fig, name: str, directory: str = "reports/figures") -> Path:
-    """Write a figure out as a PNG, creating the directory if needed.
-
-    Used when publishing the figures to reports/figures/; the notebooks render
-    inline and never call it.
-    """
+    """Write a figure out as a PNG, creating the directory if needed."""
     path = Path(directory) / (name if name.endswith(".png") else f"{name}.png")
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, bbox_inches="tight")
@@ -183,12 +168,10 @@ def save_figure(fig, name: str, directory: str = "reports/figures") -> Path:
 # ══════════════════════════════════════════════════════════════════════════════
 # The plots
 #
-# Each takes its title and subtitle as arguments so the caller can override them.
-# They are literal defaults, except in the three functions whose title names one
-# of their own arguments — those default to None and build it in the body.
+# Each takes its title and subtitle as arguments.
 # ══════════════════════════════════════════════════════════════════════════════
 
-# ── Extraction — night-level frames, so these run in the Workbench only ───────
+# ── Extraction — night-level frames, run in the Workbench only ───────
 
 def plot_funnel(funnel_df: pd.DataFrame,
                 title: str = "Nights retained at each cleaning stage",
@@ -207,7 +190,7 @@ def plot_funnel(funnel_df: pd.DataFrame,
 def plot_yearly_sleep(by_year: pd.DataFrame, cutoff_year: int = 2017,
                       title: str = "Mean nightly sleep by calendar year",
                       subtitle: str = "The analysis window excludes everything before the line"):
-    """Mean nightly sleep per year, from the aggregate the notebook builds."""
+    """Mean nightly sleep per year."""
     fig, ax = plt.subplots(figsize=FIGSIZE)
 
     sns.lineplot(by_year, x="year", y="mean_hours", marker="o", ax=ax)
@@ -217,13 +200,13 @@ def plot_yearly_sleep(by_year: pd.DataFrame, cutoff_year: int = 2017,
     return finish(fig, title, subtitle)
 
 
-def plot_sleep_distribution(sleep_df: pd.DataFrame, bins: int = 60,
+def plot_sleep_distribution(sleep_df: pd.DataFrame,
                             title: str = "Distribution of nightly sleep duration",
                             subtitle: str = "Every retained night in the cleaned extract"):
     """Histogram of nightly sleep duration across every retained night."""
     fig, ax = plt.subplots(figsize=FIGSIZE)
 
-    sns.histplot(sleep_df, x="hours_asleep", bins=bins, ax=ax)
+    sns.histplot(sleep_df, x="hours_asleep", bins=60, ax=ax)
     refline(ax, x=SLEEP_GUIDELINE, text="7-hour guideline")
     ax.set_xlabel("Hours asleep")
 
@@ -233,14 +216,13 @@ def plot_sleep_distribution(sleep_df: pd.DataFrame, bins: int = 60,
 # ── Exploration ───────────────────────────────────────────────────────────────
 
 def plot_targets(features_df: pd.DataFrame,
-                 targets=("target_sleep_duration", "target_sleep_consistency"),
                  title: str = "Distribution of the two prediction targets",
                  subtitle: str = ("Duration is mean nightly hours; consistency is the "
                                   "within-person SD of those hours")):
     """The two targets side by side, one panel each."""
-    fig, axes = plt.subplots(1, len(targets), figsize=(12.5, 5))
+    fig, axes = plt.subplots(1, len(TARGET_COLS), figsize=(12.5, 5))
 
-    for ax, col, colour in zip(axes, targets, sns.color_palette()):
+    for ax, col, colour in zip(axes, TARGET_COLS, sns.color_palette()):
         sns.histplot(features_df, x=col, bins=50, color=colour, ax=ax)
         ax.set_xlabel(label(col))
 
@@ -254,8 +236,7 @@ def plot_group_means(features_df: pd.DataFrame, group_cols, target: str,
                      subtitle: str = "Dot is the group mean, bar spans ±1 SD"):
     """Group mean ± 1 SD for every level of every column in `group_cols`.
 
-    Levels sort alphabetically: the melt drops the category orderings and
-    restoring them per facet costs more than the ordering is worth.
+    Levels sort alphabetically.
     """
     long = (features_df[[target, *group_cols]]
             .astype({c: "string" for c in group_cols})
@@ -270,7 +251,7 @@ def plot_group_means(features_df: pd.DataFrame, group_cols, target: str,
                        height=3.2, aspect=1.3, legend=False)
     grid.set_titles("{col_name}").set(ylabel="", xlabel=label(target))
 
-    for i, ax in enumerate(grid.axes.flat):     # label the line once, not six times
+    for i, ax in enumerate(grid.axes.flat):     # label the line once
         refline(ax, x=features_df[target].mean(),
                 text="cohort mean" if i == 0 else None)
 
@@ -279,47 +260,41 @@ def plot_group_means(features_df: pd.DataFrame, group_cols, target: str,
                  subtitle)
 
 
-def plot_activity_gradient(features_df: pd.DataFrame, n_bins: int = 10,
-                           steps_col: str = "mean_daily_steps",
-                           targets=("target_sleep_duration", "target_sleep_consistency"),
+def plot_activity_gradient(features_df: pd.DataFrame,
                            title: str = "Sleep by daily step count",
                            subtitle: str = ("Participants split into ten equal-sized step "
                                             "bins · band is the 95% interval")):
     """Mean outcome by decile of daily steps, one panel per target."""
     long = (features_df
-            .assign(step_bin=pd.qcut(features_df[steps_col].astype("float64"),
-                                     n_bins, labels=False, duplicates="drop"))
-            .melt(id_vars="step_bin", value_vars=list(targets),
+            .assign(step_bin=pd.qcut(features_df["mean_daily_steps"].astype("float64"),
+                                     10, labels=False, duplicates="drop"))
+            .melt(id_vars="step_bin", value_vars=list(TARGET_COLS),
                   var_name="target", value_name="value")
             .assign(target=lambda f: f["target"].map(label)))
 
-    # seed makes the band reproducible: seaborn bootstraps the CI, and unseeded it
-    # draws from the global RNG, so the figure came out different on every run.
     grid = sns.relplot(long, x="step_bin", y="value", col="target", hue="target",
                        kind="line", marker="o", errorbar=("ci", 95), seed=0,
                        height=4.4, aspect=1.15, legend=False,
                        facet_kws={"sharey": False})
-    grid.set_titles("{col_name}").set(xlabel=f"{label(steps_col)} decile", ylabel="")
+    grid.set_titles("{col_name}").set(xlabel=f"{label('mean_daily_steps')} decile", ylabel="")
 
     return finish(grid.figure, title, subtitle)
 
 
 # ── Model results ─────────────────────────────────────────────────────────────
 
-def plot_model_comparison(results: dict, baseline: str = "Baseline (mean)",
+def plot_model_comparison(results: dict,
                           title: str = "Cross-validated R² by model",
                           subtitle: str = ("Five-fold CV, one feature matrix per target · "
                                            "R² is measured against a mean baseline of 0")):
-    """Cross-validated R² by model, one panel per target, for a
-    {target: run_all_models() frame} mapping.
+    """Cross-validated R² by model, one panel per target.
 
-    `baseline` scores 0 by construction, so it is dropped rather than drawn.
+    The mean baseline scores 0 by construction, so it is dropped rather than drawn.
     R² rather than RMSE, which cannot be read across panels in its own units.
     """
-    long = (pd.concat([r.assign(target=t) for t, r in results.items()])
-              .query("Model != @baseline")
-              .assign(target=lambda f: f["target"].map(label)))
-    long["target"] = pd.Categorical(long["target"], [label(t) for t in results])
+    long = pd.concat([r.assign(target=t) for t, r in results.items()])
+    long = long[long["Model"] != "Baseline (mean)"]
+    long["target"] = pd.Categorical(long["target"].map(label), [label(t) for t in results])
 
     grid = sns.catplot(long, x="r2_mean", y="Model", col="target", hue="Model",
                        kind="bar", orient="h", height=4.2, aspect=1.5,
@@ -338,15 +313,15 @@ def plot_model_comparison(results: dict, baseline: str = "Baseline (mean)",
 def plot_interpretation(coefficients: pd.Series, importances: pd.Series, target_name: str,
                         title: str = None,
                         subtitle: str = ("Ridge coefficients on standardized features "
-                                         "(left) and HistGBM permutation importance (right)"),
-                        top_n: int = 12):
+                                         "(left) and HistGBM permutation importance (right)")):
     """Direction and reliance for one target, side by side.
 
     Both arguments are feature-indexed Series: `models.coefficients()` on a fitted
     Ridge pipeline, and `models.permutation_scores()` on HistGBM.
     """
-    # Magnitude picks which features appear; sign orders them, so the panel reads
-    # most positive to most negative rather than folding the two directions.
+    top_n = 12
+
+    # Magnitude picks which features appear; sign orders them.
     coefs = (coefficients.reindex(coefficients.abs().sort_values(ascending=False).index)
              .head(top_n).sort_values(ascending=False).rename(index=label))
     imps = importances.nlargest(top_n).rename(index=label)
@@ -368,16 +343,15 @@ def plot_interpretation(coefficients: pd.Series, importances: pd.Series, target_
     return finish(fig, title or f"What predicts {target_name}", subtitle)
 
 
-def plot_calibration(predictions: dict, n_bins: int = 10,
+def plot_calibration(predictions: dict,
                      title: str = "Predicted against actual, by decile of the prediction",
                      subtitle: str = "Out-of-fold predictions · the dashed diagonal is unbiased"):
-    """Mean actual against mean predicted per decile, for a
-    {name: (y_true, y_pred)} mapping. Points on the diagonal are unbiased."""
+    """Mean actual against mean predicted per decile."""
     binned = []
     for name, (y_true, y_pred) in predictions.items():
         d = pd.DataFrame({"pred": np.asarray(y_pred, dtype=float),
                           "actual": np.asarray(y_true, dtype=float)})
-        d["bin"] = pd.qcut(d["pred"], n_bins, labels=False, duplicates="drop")
+        d["bin"] = pd.qcut(d["pred"], 10, labels=False, duplicates="drop")
         binned.append(d.groupby("bin").mean().assign(target=name))
 
     grid = sns.relplot(pd.concat(binned), x="pred", y="actual", col="target",
@@ -386,8 +360,7 @@ def plot_calibration(predictions: dict, n_bins: int = 10,
                        facet_kws={"sharex": False, "sharey": False})
     grid.set_titles("{col_name}")
 
-    # Both axes are the same quantity and need the same scale, or the identity
-    # line is not at 45° and a panel looks better calibrated than it is.
+    # Both axes are the same quantity and need the same scale.
     for ax in grid.axes.flat:
         lo = min(ax.get_xlim()[0], ax.get_ylim()[0])
         hi = max(ax.get_xlim()[1], ax.get_ylim()[1])
@@ -398,11 +371,7 @@ def plot_calibration(predictions: dict, n_bins: int = 10,
 
 
 def _stacked_label_ys(values, gap: float) -> list:
-    """Where to put each label so none sits on the one before it.
-
-    `values` arrive highest-first, so a label only ever needs pushing *down*: each
-    one takes its own value, or `gap` below its predecessor, whichever is lower.
-    Most end up at their line's actual endpoint.
+    """Where to put each label so no overlapping occurs.
     """
     ys, previous = [], None
 
@@ -416,11 +385,7 @@ def _stacked_label_ys(values, gap: float) -> list:
 def plot_fairness_slope(fairness: dict, target_name: str, exclude=(), title: str = None,
                         subtitle: str = ("Out-of-fold R², one panel per stratum · every line "
                                          "starts at the overall score and ends at a subgroup's")):
-    """Out-of-fold R² per subgroup as a slope chart, one panel per stratum, for a
-    {stratum: fairness_cv() frame} mapping, worst group in red.
-
-    Each subgroup's R² uses its own mean as the denominator, so compare groups
-    within a panel rather than against the point they start from.
+    """Out-of-fold R² per subgroup as a slope chart, one panel per stratum, worst group in red.
     """
     blocks = {name: block[~block["subgroup"].astype(str).isin(exclude)]
                         .sort_values("r2", ascending=False)
@@ -428,7 +393,7 @@ def plot_fairness_slope(fairness: dict, target_name: str, exclude=(), title: str
     overall = next(b.attrs["overall_r2"] for b in fairness.values()
                    if "overall_r2" in b.attrs)
 
-    # Just enough separation that one label never sits on the next.
+    # Seperation between labels.
     spread = pd.concat(blocks.values())["r2"]
     gap = (spread.max() - spread.min()) * 0.032
 
@@ -451,8 +416,7 @@ def plot_fairness_slope(fairness: dict, target_name: str, exclude=(), title: str
 
         ax.text(-0.04, overall, f"Overall\n{overall:.3f}", ha="right", va="center",
                 fontsize=11, fontweight="bold", color=_INK)
-        # The right of each panel is label gutter; trimming it closes the gap
-        # between the panels.
+        # Trimming closes the gap between the panels.
         ax.set(title=label(stratum), xlim=(-0.4, 2.35), xticks=[0, 1],
                xticklabels=["overall", "by subgroup"])
         ax.grid(axis="x", visible=False)
@@ -486,18 +450,15 @@ def plot_cluster_scan(scan_df: pd.DataFrame, chosen_k: int = None,
     return finish(fig, title, subtitle)
 
 
-def plot_cluster_heatmap(profile_df: pd.DataFrame, drop_cols=("N", "pct"),
+def plot_cluster_heatmap(profile_df: pd.DataFrame,
                          title: str = "Sleep phenotype profiles",
                          subtitle: str = ("Cell is the group mean · colour is the z-score "
                                           "across the four phenotypes")):
     """Standardized cluster means, for `cluster.cluster_profile()` output.
 
-    Colour is the column z-scored across clusters, which is what puts hours,
-    proportions and step counts on one scale; the printed number is the raw mean.
+    Colour is the column z-scored across clusters, printed number is the raw mean.
     """
-    means = (profile_df
-             .drop(columns=[c for c in drop_cols if c in profile_df.columns])
-             .astype("float64"))
+    means = profile_df.drop(columns=["N", "pct"]).astype("float64")
     z = (means - means.mean()) / means.std()
 
     fig, ax = plt.subplots(figsize=(14, 5))
@@ -511,13 +472,9 @@ def plot_cluster_heatmap(profile_df: pd.DataFrame, drop_cols=("N", "pct"),
 
 
 def plot_cluster_scatter(features_df: pd.DataFrame, labels: pd.Series,
-                         sample_n: int = 8000,
                          title: str = "Sleep phenotypes by duration and variability",
                          subtitle: str = "Two of the four clustering features"):
-    """Mean nightly sleep against within-person SD, coloured by phenotype.
-
-    Two of the four clustering features are the axes, so this shows what the
-    profile table cannot: the groups have no gaps between them.
+    """Mean nightly sleep against within-person SD, coloured by phenotype..
     """
     d = pd.DataFrame({
         "mean_sleep_hrs": pd.to_numeric(features_df["mean_sleep_hrs"], errors="coerce"),
@@ -525,8 +482,8 @@ def plot_cluster_scatter(features_df: pd.DataFrame, labels: pd.Series,
         "phenotype":      labels,
     }).dropna()
 
-    if sample_n and len(d) > sample_n:
-        d = d.sample(sample_n, random_state=42)
+    if len(d) > 8000:
+        d = d.sample(8000, random_state=42)
 
     fig, ax = plt.subplots(figsize=(11, 6.5))
     sns.scatterplot(d, x="mean_sleep_hrs", y="std_sleep_hrs", hue="phenotype",
