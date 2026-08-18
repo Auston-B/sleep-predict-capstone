@@ -1,130 +1,170 @@
-# 😴 Sleep Health Prediction & Phenotyping in the *All of Us* Research Program
+# Predicting and Phenotyping Sleep Health in a Diverse National Cohort
 
-[![Slide deck](https://img.shields.io/badge/Slides-Presentation-1F6FEB?logo=githubpages&logoColor=white)](https://auston-b.github.io/sleep-predict-capstone/)
-[![Live dashboard](https://img.shields.io/badge/Streamlit-Live%20dashboard-FF4B4B?logo=streamlit&logoColor=white)](https://sleep-predict-capstone.streamlit.app)
-![Python 3.11](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white)
-![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
-![All of Us CDR v9](https://img.shields.io/badge/All%20of%20Us-CDR%20v9-purple?logo=nih)
-![Fitbit Wearables](https://img.shields.io/badge/Fitbit-Wearables-teal)
+Evidence from the *All of Us* Research Program
 
-> **SIADS 699 Capstone Project** · University of Michigan School of Information · August 2026  
-> *Sophia Boettcher, Auston Balwinski, Hunter Belous, Jared Fox*
+Sophia Boettcher, Auston Balwinski, Hunter Belous, Jared Fox  
+School of Information, University of Michigan  
+SIADS 699 Capstone — August 2026
 
----
+[Final report](reports/final_report.pdf) · [Slide deck](https://auston-b.github.io/sleep-predict-capstone/) · [Dashboard](https://sleep-predict-capstone.streamlit.app) · [Poster](reports/poster.pdf)
 
-## 📖 Overview
+## Overview
 
-This project applies machine learning to Fitbit-derived sleep data from **45,259 participants** in the NIH *All of Us* Research Program (CDR v9) to (1) predict individual sleep duration and consistency using sociodemographic, health, and physical activity features, (2) identify distinct sleep behavioral phenotypes via unsupervised clustering, and (3) evaluate predictive model fairness across racial/ethnic and age subgroups. Every model is scored on one feature matrix, so differences across the results table are attributable to the estimator rather than the inputs.
+This capstone applies supervised and unsupervised machine learning to Fitbit-derived sleep data from
+45,259 participants in the NIH *All of Us* Research Program (Controlled Tier, CDR v9). It asks how
+well sociodemographic, health, and physical activity characteristics predict sleep duration and
+night-to-night consistency, what sleep behavioral phenotypes emerge from unsupervised clustering, and
+how evenly predictive accuracy holds across racial/ethnic and age subgroups. All four estimators are
+scored on a single feature matrix, so any spread across the results belongs to the estimator alone.
 
----
+## Data and access
 
-## 🔑 Key Findings
+All analysis was conducted inside the [*All of Us* Researcher
+Workbench](https://workbench.researchallofus.org/). Access to the Controlled Tier dataset requires
+registration and approval through the program.
 
-- **Model class matters for one target, not the other:** HistGBM reaches R² = 0.277 on sleep consistency, an **11% gain** over Ridge (0.250), but ties Ridge on duration (0.104 vs 0.103). What limits duration prediction is missing information, not model form
-- **Top predictors for duration:** activity level (permutation importance 0.045), male gender (0.043), White race/ethnicity (0.039), age (0.031), BMI (0.030)
-- **Top predictor for consistency:** activity *irregularity* — the step coefficient of variation (0.133), roughly 3× the next feature. The activity–consistency relationship is curved rather than age-moderated, and no interaction term survived screening
-- **Wear time is a control, not a determinant.** Nights tracked scores 0.007 on duration under permutation importance on held-out data
-- **4 sleep phenotypes identified** (KMeans on four sleep-behavior columns):
-  - 🟢 **Consistent Good Sleepers** (39%, n=17,796) — adequate duration, lowest variability, highest activity, lowest BMI
-  - 🟡 **Short but Regular** (27%, n=12,186) — 47% of nights under 6 h, but predictable schedules
-  - 🔴 **Chronic Short & Variable** (24%, n=10,703) — at the cohort's mean duration but with the highest variability, the most nights at both extremes, highest BMI and youngest mean age.
-  - 🟣 **Variable Long Sleepers** (10%, n=4,574) — least active by a wide margin
-- **Two distinct fairness gaps, on two different targets.** The racial gaps differ in *pattern* more than in size. On **consistency** the ordering is graded against White participants, who score highest (0.285), with Black (0.170) and Asian (0.169) participants roughly 40% below. On **duration** that ordering disappears — White (0.072) sits level with Black (0.072) and well below Hispanic or Latino (0.107). The largest single disparity is by age on duration, where accuracy falls **77%** from 0.139 (18–40) to 0.031 (81+)
-- **Cohort:** 45,259 participants; mean age 56.7, 66.6% female, 70.1% White; mean sleep 6.89 hrs/night, 25.4% of nights under 6 h
+**No individual-level data are included in this repository.** What is published here is aggregate:
+summary statistics, cross-validation scores, model coefficients, cluster centroids, and figures. The
+eight CSVs in `dashboard/` are population-level summaries from which no participant can be
+identified.
 
----
+## Methods
 
-## 📁 Repository Structure
+| Component | Details |
+|---|---|
+| Data source | *All of Us* CDR v9, `fitbit_sleep_daily_summary` |
+| Data extraction | BigQuery; see [`notebooks/data_extraction.ipynb`](notebooks/data_extraction.ipynb) |
+| Cohort | 45,259 adults with at least 30 valid Fitbit nights and a completed Basics survey, restricted during extraction from the 48,688 who cleared the 4-night floor |
+| Outcomes | Mean nightly sleep hours (duration) and the within-person SD of those hours (consistency) |
+| Feature matrix | 9 numeric columns plus 8 one-hot dummies, after leakage and collinearity pruning (max \|r\| 0.53, condition number 5.2) |
+| Models | Mean baseline, Ridge, random forest, histogram gradient boosting, all on the same matrix under 5-fold `KFold` cross-validation |
+| Interpretation | Ridge coefficients for direction, HistGBM permutation importance for reliance; impurity importance is not used |
+| Clustering | KMeans, k = 4, on four sleep-behavior columns, selected by inertia and silhouette |
+| Fairness evaluation | Out-of-fold R² stratified by race/ethnicity and age band |
+| Environment | *All of Us* Researcher Workbench (Terra) for extraction, local for analysis; Python 3.11 |
+
+
+
+## Results
+
+### Prediction
+
+| Model | Duration R² | Duration RMSE ± SD | Consistency R² | Consistency RMSE ± SD |
+|---|---|---|---|---|
+| Baseline (mean) | −0.000 | 0.646 ± 0.009 | −0.000 | 0.296 ± 0.002 |
+| Ridge | 0.103 | 0.612 ± 0.005 | 0.250 | 0.257 ± 0.001 |
+| Random forest | 0.095 | 0.615 ± 0.007 | 0.269 | 0.253 ± 0.002 |
+| HistGBM | 0.104 | 0.612 ± 0.006 | 0.277 | 0.252 ± 0.002 |
+
+Both targets clear the baseline. On consistency, histogram gradient boosting reaches R² = 0.277
+against Ridge's 0.250, an 11% relative gain and about three times either model's fold-to-fold
+variation. On duration the two are indistinguishable at 0.104 and 0.103. Held-out scores land
+slightly above the cross-validated figures and out-of-fold predictions are unbiased to within 0.016
+hours, so the modest duration R² reflects real unexplained variance.
+
+The targets rest on different features. Duration is carried by person-level attributes: activity
+level (permutation importance 0.045), male gender (0.043), White race/ethnicity (0.039), age (0.031),
+BMI (0.030). Consistency is dominated by the step coefficient of variation at 0.133, about three
+times age (0.045) and activity level (0.030) behind it. That relationship is curved, its slope holds
+flat across age quartiles, and no interaction term earned a column. Nights tracked scores 0.007 on
+duration and enters the matrix as a wear-time control.
+
+### Phenotypes
+
+KMeans with k = 4 was fitted to four standardized sleep-behavior columns: mean nightly sleep, the
+within-person SD, and the shares of nights under six and over nine hours. Demographics and activity
+were described after fitting, so the partition reflects sleep behavior alone.
+
+| Phenotype | N | % | Mean sleep (hrs) | SD | Nights < 6h | Mean steps | Mean BMI |
+|---|---|---|---|---|---|---|---|
+| Consistent Good Sleepers | 17,796 | 39.3% | 7.13 | 0.95 | 12% | 7,788 | 27.6 |
+| Short but Regular | 12,186 | 26.9% | 6.13 | 1.07 | 47% | 7,472 | 30.4 |
+| Chronic Short & Variable | 10,703 | 23.6% | 6.89 | 1.44 | 29% | 6,181 | 30.8 |
+| Variable Long Sleepers | 4,574 | 10.1% | 7.97 | 1.48 | 11% | 5,386 | 30.0 |
+
+Chronic Short & Variable sits at the cohort's mean duration with the highest variability, the most
+nights at both extremes, the highest BMI, and the youngest mean age, which marks it as the group of
+most clinical interest. Participants form one continuous cloud, so these
+names describe cuts through a distribution and are not clinical categories.
+
+### Fairness
+
+Subgroups were scored with out-of-fold R², so every participant is evaluated by a model that did not
+train on them. Two disparities appear, on two targets, affecting largely different people.
+
+The largest is by age on duration: accuracy declines monotonically from 0.139 in the 18–40 band to
+0.031 for participants 81 and over, a fall of 77%. Consistency shows an age effect in a different
+shape, peaking at 41–60 (0.268) and falling to 0.180 in the oldest band.
+
+The racial disparities differ between the two targets in shape more than in size. On consistency,
+White participants score highest at 0.285, with Black participants at 0.170 and Asian participants at
+0.169, lower by 40% and 41%. On duration that ordering does not hold: White participants (0.072) sit
+level with Black participants (0.072), both below Hispanic or Latino participants at 0.107.
+Training-data composition, unmeasured confounders, and wearable staging validated primarily in
+younger and lighter-skinned populations are all consistent with these results, and this analysis
+cannot separate them.
+
+## Repository contents
 
 ```
-sleep-predict-capstone/
-├── README.md
-├── LICENSE
-├── requirements.txt
-├── .github/workflows/           # Publishes presentation/ to GitHub Pages
+.
 ├── notebooks/
-│   ├── data_extraction.ipynb   # BigQuery cohort build (documented queries) — writes
-│   │                           # the analytic cohort, both night floors applied
-│   └── analysis.ipynb          # The supervised analysis and phenotyping
+│   ├── data_extraction.ipynb   # BigQuery cohort build; writes the participant-level extract
+│   └── analysis.ipynb          # Modeling, interpretation, fairness, phenotyping
 ├── src/
-│   ├── features.py             # Cleaning + participant-level feature engineering
-│   ├── models.py               # Feature matrix, CV, fairness evaluation
-│   ├── cluster.py              # KMeans phenotyping and the naming rules
-│   └── viz.py                  # Every figure
+│   ├── features.py             # Cleaning and participant-level feature engineering
+│   ├── models.py               # Feature matrix, cross-validation, fairness evaluation
+│   ├── cluster.py              # KMeans phenotyping and cluster naming
+│   └── viz.py                  # Figure functions
 ├── dashboard/
-│   ├── app.py                  # Streamlit dashboard
+│   ├── app.py                  # Streamlit application
 │   ├── requirements.txt
-│   └── *.csv                   # Aggregate result files
+│   └── *.csv                   # Eight aggregate result tables
 ├── presentation/
-│   ├── index.html              # Slide deck, published to auston-b.github.io/sleep-predict-capstone
+│   ├── index.html              # Slide deck, published to GitHub Pages
 │   └── fig_*.png               # The seven figures the deck embeds
-└── reports/
-    ├── final_report.md         # The report, plus Appendices A–C (methodological
-    │                           # asides, data flow, AI use)
-    ├── final_report.pdf        # The same report, typeset
-    ├── poster.pdf              # The conference poster, 36 × 48 in
-    └── figures/                # All publication figures
+├── reports/
+│   ├── final_report.md         # Report source
+│   ├── final_report.pdf        # The same report, typeset
+│   ├── poster.pdf              # Conference poster, 36 × 48 in
+│   └── figures/                # All 17 publication figures
+├── .github/workflows/          # Publishes presentation/ to GitHub Pages
+├── requirements.txt
+└── LICENSE
 ```
 
+**`notebooks/data_extraction.ipynb`** holds every query behind the analytic cohort and is the only
+writer of the participant-level extract. It runs in the Researcher Workbench in three layers:
+profiling queries that justify each inclusion threshold, five extraction queries collapsing 39
+million night-level rows to one row per participant, and restriction and validation covering the
+30-night floor, the cohort funnel, the missingness audit, and the demographic recode audit. Both
+night floors are applied here, so the extract is already the analytic cohort. Every finding is
+written in as a table, so the notebook reads without Workbench access, but running it requires
+Controlled Tier credentials.
 
-### 📓 `notebooks/data_extraction.ipynb`
+**`notebooks/analysis.ipynb`** covers feature selection under explicit leakage and collinearity
+rules, four models on one matrix, interpretation, calibration, subgroup fairness, and phenotyping. It
+runs locally on the participant-level extract, writes nothing to disk, and produces only aggregates.
+It begins at feature construction, since the cohort arrives already restricted.
 
-The query record behind the analytic cohort, and the only writer of the participant-level extract. It
-runs inside the *All of Us* Researcher Workbench and is structured in three layers: **profiling**
-(queries that establish what the data looks like, each one justifying a specific inclusion
-threshold), **extraction** (five queries collapsing 39M night-level rows to one row per participant),
-and **restriction & validation** (the ≥30-night floor with the sampling-variance argument behind it,
-then the cohort funnel, the missingness audit and the demographic recode audit).
+The figures in `reports/figures/` and the eight CSVs in `dashboard/` are generated by code, so the
+numbers in the report, the deck, and the dashboard cannot drift apart. The plotting and profiling
+functions are published in `src/`; the driver that calls them is kept local, as with the poster
+tooling. Three figures come from the extraction run instead, because they need a grain that does not
+leave the Workbench (`fig_yearly_sleep`, `fig_funnel`, `fig_sleep_distribution`), and two are
+hand-authored schematics (`fig_data_flow`, `fig_ai_workflow`).
 
-Both night floors are applied here, so the pickle it writes *is* the analytic cohort — nothing
-downstream reshapes it.
+## Published artifacts
 
-It is readable without Workbench access — every finding is written into the notebook as a table — but
-it cannot be executed without Controlled Tier credentials, and it emits no individual-level output.
+**Slide deck.** A 21-slide deck at
+[auston-b.github.io/sleep-predict-capstone](https://auston-b.github.io/sleep-predict-capstone/)
+covering the question, the cohort, the models, the phenotypes, and the fairness results. It is served
+from `presentation/` and redeployed by GitHub Actions on each push to `main`.
 
-### 📓 `notebooks/analysis.ipynb`
-
-The analysis itself: exploration, feature selection under explicit leakage and collinearity rules,
-four models on one matrix, interpretation, calibration, subgroup fairness, and phenotyping. **It runs
-locally** — the sole input is the participant-level extract, nothing is written to disk, and every
-output is an aggregate.
-
-It starts at feature construction. The cohort arrives already restricted, so nothing in this notebook
-changes who is in it.
-
-### ♻️ How the artifacts are produced
-
-Every data figure in `reports/figures/` and all eight CSVs in `dashboard/` are generated
-programmatically by the `src/` modules — regenerated rather than transcribed, so the numbers in the
-report, the deck and the dashboard cannot drift apart.
-
-Most are written by `src/viz.py` from the participant-level extract. The three night- and day-level
-figures (`fig_yearly_sleep`, `fig_funnel`, `fig_sleep_distribution`) come from the extraction run
-instead, because they need a grain that never leaves the Workbench. The two schematic diagrams
-(`fig_data_flow`, `fig_ai_workflow`) are hand-authored illustrations rather than plots of data, drawn
-by local tooling that is not part of this repository.
-
----
-
-## 🎤 The Presentation
-
-**→ [auston-b.github.io/sleep-predict-capstone](https://auston-b.github.io/sleep-predict-capstone/)**
-
-The 21-slide deck walking through the question, the cohort, the models, the phenotypes and the
-fairness results. Navigate with the arrow keys, space, or by clicking. It is served from
-`presentation/`, redeployed by GitHub Actions on every push to `main`, so it never falls behind the
-figures in this repository.
-
----
-
-## 🚀 The Dashboard
-
-**→ [sleep-predict-capstone.streamlit.app](https://sleep-predict-capstone.streamlit.app)**
-
-The interactive Streamlit dashboard visualizes model results, cluster profiles, and fairness metrics.
-Nothing to install and no authentication required — everything it displays is aggregate only.
-
-To run the same app locally instead:
+**Dashboard.** An interactive Streamlit application at
+[sleep-predict-capstone.streamlit.app](https://sleep-predict-capstone.streamlit.app) presenting model
+results, cluster profiles, and fairness metrics. Everything it displays is aggregate. To run it
+locally:
 
 ```bash
 cd dashboard
@@ -132,67 +172,28 @@ pip install -r requirements.txt
 streamlit run app.py
 ```
 
-It opens at `http://localhost:8501`. The app reads the eight CSVs in `dashboard/` relative to its own
-file, so it runs from any working directory.
+**Poster.** A 36 × 48 in conference poster, [`reports/poster.pdf`](reports/poster.pdf), presenting
+the cohort, the model comparison, the interpretation panels, and both fairness results on one sheet.
+Its layout is produced by a script; the editable sources stay local and the exported print file ships
+here.
 
----
+## Figures
 
-## 🖼️ The Poster
-
-**→ [`reports/poster.pdf`](reports/poster.pdf)**
-
-The 36 × 48 in conference poster: the question, the cohort, the model comparison, the two
-interpretation panels and both fairness results on one sheet, with QR codes to the deck and the
-dashboard. Its layout is generated rather than drawn, and the editable sources stay local — what
-ships here is the exported print file.
-
----
-
-## 🔬 Methods Overview
-
-| Component | Details |
-|---|---|
-| **Data source** | *All of Us* CDR v9, `fitbit_sleep_daily_summary` |
-| **Data extraction** | BigQuery — see [`notebooks/data_extraction.ipynb`](notebooks/data_extraction.ipynb) for the profiling and extraction queries |
-| **Cohort** | 45,259 adults with ≥30 valid Fitbit nights + Basics survey, restricted during extraction from the 48,688 who cleared ≥4 nights |
-| **Outcomes** | Mean nightly sleep hours (duration); within-person SD of those hours (consistency) |
-| **Feature matrix** | 9 numeric columns + 8 one-hot dummies = 17, after leakage and collinearity pruning (max \|r\| 0.53, condition number 5.2) |
-| **Models** | Mean baseline, Ridge, Random Forest, HistGBM — all on the same matrix, 5-fold `KFold` CV |
-| **Interpretation** | Ridge coefficients (direction) + HistGBM permutation importance (reliance); no impurity importance |
-| **Clustering** | KMeans k=4 on four sleep-behavior columns; inertia + silhouette selection |
-| **Fairness evaluation** | Out-of-fold R² stratified by race/ethnicity and age band |
-| **Environment** | *All of Us* Researcher Workbench (Terra) for extraction; local for analysis. Python 3.11 |
-
----
-
-## 🗃️ Data Notice
-
-> **⚠️ No individual-level data are included in this repository.**
-
-All analyses were conducted within the secure [*All of Us* Researcher Workbench](https://workbench.researchallofus.org/) (Terra cloud environment). Access to the Controlled Tier dataset requires registration and approval through the *All of Us* Research Program.
-
-This public repository contains **aggregate results only** (summary statistics, model coefficients, cluster centroids, and figures). CSV files in `dashboard/` contain only population-level summaries with no records that could identify individual participants.
-
----
-
-## 📊 Publication Figures
-
-All figures live in `reports/figures/`. The "In report" column gives the figure number the report
-assigns each one, so a figure in the report can be traced back to the file that produced it.
+All figures are in `reports/figures/`. The final column gives the number the report assigns each one.
 
 | Filename | Description | In report |
 |---|---|---|
 | `fig_targets.png` | Distribution of the two prediction targets | Figure 1 |
 | `fig_group_means.png` | Sleep duration by demographic group | Figure 2 |
 | `fig_model_comparison.png` | Cross-validated R² by model | Figure 3 |
-| `fig_interpretation_duration.png` | Ridge coefficients + permutation importance — duration | Figure 4 |
-| `fig_interpretation_consistency.png` | Ridge coefficients + permutation importance — consistency | Figure 5 |
+| `fig_interpretation_duration.png` | Ridge coefficients and permutation importance, duration | Figure 4 |
+| `fig_interpretation_consistency.png` | Ridge coefficients and permutation importance, consistency | Figure 5 |
 | `fig_cluster_heatmap.png` | Cluster profile heatmap | Figure 6 |
-| `fig_fairness_duration.png` | Out-of-fold R² by subgroup — duration | Figure 7 |
-| `fig_fairness_consistency.png` | Out-of-fold R² by subgroup — consistency | Figure 8 |
-| `fig_yearly_sleep.png` | Mean nightly sleep by calendar year — the evidence for the 2017 window | Figure A1 |
-| `fig_calibration.png` | Predicted vs. actual by decile of the prediction | Figure A2 |
-| `fig_cluster_scan.png` | Choosing k — inertia and silhouette | Figure A3 |
+| `fig_fairness_duration.png` | Out-of-fold R² by subgroup, duration | Figure 7 |
+| `fig_fairness_consistency.png` | Out-of-fold R² by subgroup, consistency | Figure 8 |
+| `fig_yearly_sleep.png` | Mean nightly sleep by calendar year, the evidence for the 2017 window | Figure A1 |
+| `fig_calibration.png` | Predicted against actual by decile of the prediction | Figure A2 |
+| `fig_cluster_scan.png` | Choosing k: inertia and silhouette | Figure A3 |
 | `fig_cluster_scatter.png` | Phenotypes by duration and variability | Figure A4 |
 | `fig_data_flow.png` | BigQuery to published artifacts, with the trust boundary | Figure A5 |
 | `fig_ai_workflow.png` | Who ran what, and the Controlled Tier boundary | Figure A6 |
@@ -200,15 +201,10 @@ assigns each one, so a figure in the report can be traced back to the file that 
 | `fig_sleep_distribution.png` | Distribution of nightly sleep across every retained night | — |
 | `fig_activity_gradient.png` | Sleep by daily step decile | — |
 
-The last three were produced during the analysis but cut from the final report for length. They are
-kept here because they document the night-level cleaning and the activity gradient, which the report
-asserts in prose.
+The last three document the night-level cleaning and the
+activity gradient, which the report states in prose.
 
----
-
-## 📝 Citation
-
-If you use or build on this work, please cite:
+## Citation
 
 ```bibtex
 @misc{boettcher2026sleep,
@@ -221,16 +217,12 @@ If you use or build on this work, please cite:
 }
 ```
 
----
-
-## 🙏 Acknowledgments
+## Acknowledgments
 
 This work rests on the *All of Us* Research Program participants, who contributed years of their own
-wearable data to research. Thanks also to the University of Michigan School of Information SIADS 699
-teaching team for their guidance throughout this capstone.
-
-The *All of Us* Research Program requires that publications using its data carry the funding
-acknowledgment below. It is reproduced verbatim, and collapsed only so it does not crowd the page.
+wearable data to research. We also thank the SIADS 699 teaching team at the University of Michigan
+School of Information. The *All of Us* Research Program requires that publications using its data
+carry the funding acknowledgment below, reproduced verbatim.
 
 <details>
 <summary><b>Required <i>All of Us</i> funding acknowledgment</b></summary>
@@ -245,6 +237,6 @@ Community Partners: 1 OT2 OD025277; 3 OT2 OD025315; 1 OT2 OD025337; 1 OT2 OD0252
 
 </details>
 
----
+## License
 
-*Licensed under the [MIT License](LICENSE). See LICENSE for details.*
+Released under the [MIT License](LICENSE).
